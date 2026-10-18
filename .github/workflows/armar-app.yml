@@ -1,0 +1,45 @@
+name: Armar la app
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  armar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bajar el código
+        uses: actions/checkout@v4
+
+      - name: Preparar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Fabricar la app (APK)
+        run: gradle assembleDebug --stacktrace
+
+      - name: Renombrar
+        run: cp app/build/outputs/apk/debug/app-debug.apk Traductor.apk
+
+      - name: Guardar como archivo del trabajo
+        uses: actions/upload-artifact@v4
+        with:
+          name: Traductor-apk
+          path: Traductor.apk
+
+      - name: Publicar en Releases (para bajarla desde el celular)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: version-${{ github.run_number }}
+          name: Traductor versión ${{ github.run_number }}
+          files: Traductor.apk
