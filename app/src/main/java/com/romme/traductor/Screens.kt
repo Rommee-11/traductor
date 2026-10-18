@@ -356,7 +356,7 @@ fun HomeScreen(vm: AppViewModel) {
             AppLogo(52)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text("Traductor", color = Pal.Text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text("Romme Traductor", color = Pal.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Español", color = Pal.Es, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Text("  ⇄  ", color = Pal.Sub, fontSize = 14.sp)
@@ -558,10 +558,10 @@ fun IndividualScreen(vm: AppViewModel) {
                 items(vm.turns, key = { it.id }) { turn ->
                     TurnCard(turn, highlight = turn == vm.turns.lastOrNull(), onReplay = { vm.replay(turn) })
                 }
-                if (listening && vm.partial.isNotBlank()) {
+                if (listening && vm.liveText.isNotBlank()) {
                     item {
                         CardBox(Modifier.fillMaxWidth(), accent = me.color) {
-                            Text(vm.partial, color = Pal.Text.copy(alpha = 0.8f), fontSize = 20.sp)
+                            Text(vm.liveText, color = Pal.Text.copy(alpha = 0.8f), fontSize = 20.sp)
                         }
                     }
                 }
@@ -706,7 +706,7 @@ private fun SharedHalf(vm: AppViewModel, lang: Lang, onMic: () -> Unit) {
         ) {
             when {
                 listening -> Text(
-                    vm.partial.ifBlank { lang.t("Te escucho…", "Listening…") },
+                    vm.liveText.ifBlank { lang.t("Te escucho… tocá de nuevo para terminar", "Listening… tap again to finish") },
                     style = BigText.copy(color = Pal.Text.copy(alpha = 0.85f)), textAlign = TextAlign.Center,
                 )
                 last == null -> Text(

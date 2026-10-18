@@ -193,15 +193,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun useOnlineNow(): Boolean = online && key().isNotBlank() && hasInternet()
 
     // ───────── Escuchar ─────────
+    // Un toque empieza a escuchar y sigue escuchando aunque hagas pausas.
+    // Otro toque corta y recién ahí traduce todo lo que dijiste.
+    private var heard by mutableStateOf("")
+    private var stopRequested = false
+    private var sessionId = 0
+
     fun toggleListening(lang: Lang) {
         if (listeningLang == lang) {
-            listener.stop()
+            requestStop()
             return
         }
-        startListening(lang)
-    }
-
-    private fun startListening(lang: Lang) {
+        if (listeningLang != null) cancelListening()
         speaker.stop()
         if (!listener.isAvailable()) {
             notice = lang.t(
@@ -210,36 +213,88 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             return
         }
-        listener.destroy()
+        heard = ""
+        stopRequested = false
         partial = ""
         micLevel = 0f
         listeningLang = lang
+        sessionId++
+        val id = sessionId
+        // Por seguridad, corta solo después de 2 minutos
+        mainHandler.postDelayed({ if (sessionId == id && listeningLang == lang) requestStop() }, 120_000)
+        listenRound(lang, id)
+    }
+
+    private fun shownText(): String = (heard + " " + partial).trim()
+
+    private fun listenRound(lang: Lang, id: Int) {
         listener.start(
             lang = lang,
             preferOffline = !hasInternet(),
-            onPartial = { partial = it },
-            onLevel = { micLevel = it },
+            onPartial = { if (id == sessionId) partial = it },
+            onLevel = { if (id == sessionId) micLevel = it },
             onResult = { text ->
-                listeningLang = null
-                micLevel = 0f
-                partial = ""
-                if (text.isNotBlank()) translateAndSpeak(text, lang)
+                if (id == sessionId) {
+                    if (text.isNotBlank()) heard = (heard + " " + text.trim()).trim()
+                    partial = ""
+                    // Si no tocaste para cortar, sigue escuchando
+                    if (stopRequested) finishListening(lang) else listenRound(lang, id)
+                }
             },
             onError = { code ->
-                listeningLang = null
-                micLevel = 0f
-                partial = ""
-                notice = errorText(code, lang)
+                if (id == sessionId) {
+                    val silence = code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+                        code == SpeechRecognizer.ERROR_CLIENT || code == SpeechRecognizer.ERROR_RECOGNIZER_BUSY
+                    when {
+                        stopRequested -> finishListening(lang)
+                        silence -> mainHandler.postDelayed({ if (id == sessionId && listeningLang == lang) listenRound(lang, id) }, 150)
+                        else -> {
+                            val msg = errorText(code, lang)
+                            if (heard.isNotBlank()) finishListening(lang) else {
+                                cancelListening()
+                                notice = msg
+                            }
+                        }
+                    }
+                }
             },
         )
     }
 
-    fun cancelListening() {
+    private fun requestStop() {
+        val lang = listeningLang ?: return
+        stopRequested = true
+        // Lo que se ve en pantalla se guarda ya, por si el celular tarda en responder
+        val id = sessionId
+        listener.stop()
+        mainHandler.postDelayed({ if (id == sessionId && listeningLang == lang) finishListening(lang) }, 1800)
+    }
+
+    private fun finishListening(lang: Lang) {
+        val text = shownText()
+        sessionId++
         listener.destroy()
         listeningLang = null
         micLevel = 0f
         partial = ""
+        heard = ""
+        stopRequested = false
+        if (text.isNotBlank()) translateAndSpeak(text, lang)
+        else notice = lang.t("No te escuché. Tocá el micrófono y hablá.", "I didn't hear anything. Tap the mic and speak.")
     }
+
+    fun cancelListening() {
+        sessionId++
+        listener.destroy()
+        listeningLang = null
+        micLevel = 0f
+        partial = ""
+        heard = ""
+        stopRequested = false
+    }
+
+    /** Texto que se muestra mientras escucha. */
+    val liveText: String get() = shownText()
 
     private fun errorText(code: Int, lang: Lang): String? = when (code) {
         SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->

@@ -42,6 +42,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -190,7 +192,18 @@ fun MicButton(
     )
     val voice by animateFloatAsState(if (listening) 1f + level * 0.18f else 1f, tween(90), label = "voz")
 
-    Box(Modifier.size(size * 1.5f), contentAlignment = Alignment.Center) {
+    val haptic = LocalHapticFeedback.current
+    // Toda el área (también el aro) responde al toque, con vibración
+    Box(
+        Modifier
+            .size(size * 1.5f)
+            .clip(CircleShape)
+            .clickable(enabled = !working) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
         if (listening) {
             Box(
                 Modifier
@@ -212,8 +225,7 @@ fun MicButton(
                 .size(size)
                 .scale(voice)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(lang.color, lang.colorDark)))
-                .clickable(enabled = !working, onClick = onClick),
+                .background(Brush.linearGradient(listOf(lang.color, lang.colorDark))),
             contentAlignment = Alignment.Center,
         ) {
             if (working) {
