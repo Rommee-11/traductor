@@ -242,16 +242,16 @@ class SpeechListener(private val context: Context) {
 
 // ─────────────────────────────────────────────────────────────
 // VOZ SIN INTERNET: pide al celular que descargue el idioma solo
-// (Android 13 o más nuevo). En celulares más viejos no hace nada.
+// (Android 14 o más nuevo). En celulares más viejos no hace nada.
 // ─────────────────────────────────────────────────────────────
 object OfflineSpeech {
     fun ensure(context: Context, lang: Lang) {
-        if (Build.VERSION.SDK_INT < 33) return
-        Handler(Looper.getMainLooper()).post { ensure33(context, lang) }
+        if (Build.VERSION.SDK_INT < 34) return
+        Handler(Looper.getMainLooper()).post { ensure34(context, lang) }
     }
 
-    @RequiresApi(33)
-    private fun ensure33(context: Context, lang: Lang) {
+    @RequiresApi(34)
+    private fun ensure34(context: Context, lang: Lang) {
         try {
             if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) return
             val rec = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
@@ -264,13 +264,9 @@ object OfflineSpeech {
                 override fun onSupportResult(support: RecognitionSupport) {
                     try {
                         fun List<String>.has() = any { it.startsWith(base, ignoreCase = true) }
-                        // Android 14 cambió los nombres de estas listas
-                        @Suppress("DEPRECATION")
-                        val installed = if (Build.VERSION.SDK_INT >= 34) support.installedOnDeviceLanguages else support.installedLanguages
-                        @Suppress("DEPRECATION")
-                        val pending = if (Build.VERSION.SDK_INT >= 34) support.pendingOnDeviceLanguages else support.pendingLanguages
-                        @Suppress("DEPRECATION")
-                        val supported = if (Build.VERSION.SDK_INT >= 34) support.supportedOnDeviceLanguages else support.supportedLanguages
+                        val installed = support.installedOnDeviceLanguages
+                        val pending = support.pendingOnDeviceLanguages
+                        val supported = support.supportedOnDeviceLanguages
                         val ready = installed.has() || pending.has()
                         if (!ready && supported.has()) {
                             val pick = supported.firstOrNull { it.equals(lang.tag, ignoreCase = true) }
