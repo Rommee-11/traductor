@@ -12,8 +12,8 @@ android {
         applicationId = "com.romme.traductor"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2"
+        versionCode = 3
+        versionName = "0.3"
 
         // Clave de IA incluida en la app. Viene de los "Secrets" de GitHub,
         // así nunca queda escrita en el código.

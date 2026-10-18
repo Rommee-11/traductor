@@ -23,6 +23,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -51,10 +53,8 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Keyboard
-import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PhotoLibrary
-import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.SwapVert
@@ -85,8 +85,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -96,27 +98,21 @@ import kotlinx.coroutines.delay
 import java.io.File
 
 // ═════════════════════════════════════════════════════════════
-// RAÍZ: elige la pantalla y muestra los avisos
+// RAÍZ: fondo con ondas, la pantalla elegida y los avisos
 // ═════════════════════════════════════════════════════════════
 @Composable
 fun AppRoot(vm: AppViewModel) {
-    BackHandler(enabled = vm.screen != Screen.HOME && vm.screen != Screen.SETUP) { vm.go(Screen.HOME) }
+    BackHandler(enabled = vm.screen != Screen.HOME) { vm.go(Screen.HOME) }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(BgBrush)
-    ) {
+    WaveBackground(Modifier.fillMaxSize()) {
         when (vm.screen) {
-            Screen.SETUP -> SetupScreen(vm)
-            Screen.HOME -> HomeScreen(vm)
+            Screen.SETUP, Screen.HOME -> HomeScreen(vm)
             Screen.INDIVIDUAL -> IndividualScreen(vm)
             Screen.SHARED -> SharedScreen(vm)
             Screen.READ -> ReadScreen(vm)
             Screen.SETTINGS -> SettingsScreen(vm)
         }
 
-        // Aviso flotante
         val notice = vm.notice
         LaunchedEffect(notice) {
             if (notice != null) {
@@ -138,7 +134,7 @@ fun AppRoot(vm: AppViewModel) {
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(Pal.Card2)
-                    .border(1.dp, Pal.Warn.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                    .border(1.dp, Pal.Warn.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
                     .clickable { vm.notice = null }
                     .padding(16.dp)
             ) {
@@ -195,150 +191,6 @@ fun openTtsSettings(ctx: Context) = openSafe(
 )
 
 // ═════════════════════════════════════════════════════════════
-// BIENVENIDA (solo la primera vez)
-// ═════════════════════════════════════════════════════════════
-@Composable
-fun SetupScreen(vm: AppViewModel) {
-    val ctx = LocalContext.current
-    var micOk by remember {
-        mutableStateOf(ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
-    }
-    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { micOk = it }
-
-    Column(
-        Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(22.dp),
-    ) {
-        Spacer(Modifier.height(18.dp))
-        AppLogo()
-        Spacer(Modifier.height(18.dp))
-        Text("¡Bienvenido!", color = Pal.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-        Text("Welcome!", color = Pal.Sub, fontSize = 18.sp)
-        Spacer(Modifier.height(10.dp))
-        Text(
-            "Preparemos todo para que funcione también sin internet. Son 3 pasos y se hacen una sola vez, con wifi.",
-            color = Pal.Sub, fontSize = 15.sp, lineHeight = 21.sp,
-        )
-        Spacer(Modifier.height(22.dp))
-
-        // Idioma de quien usa este celular
-        CardBox(Modifier.fillMaxWidth()) {
-            Column {
-                SmallLabel("¿Quién usa este celular? · Who uses this phone?")
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Lang.entries.forEach { l ->
-                        val sel = vm.myLang == l
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(if (sel) l.color.copy(alpha = 0.18f) else Pal.Card2)
-                                .border(if (sel) 2.dp else 1.dp, if (sel) l.color else Pal.Line, RoundedCornerShape(16.dp))
-                                .clickable { vm.updateMyLang(l) }
-                                .padding(vertical = 14.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(l.flag, fontSize = 26.sp)
-                                Text(l.t("Hablo español", "I speak English"), color = if (sel) l.color else Pal.Text, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-
-        SetupStep(
-            n = 1, title = "Permiso de micrófono",
-            text = "Para escuchar lo que dicen.",
-            done = micOk, button = "Permitir",
-        ) { askMic.launch(Manifest.permission.RECORD_AUDIO) }
-
-        SetupStep(
-            n = 2, title = "Traducción sin internet",
-            text = vm.downloadMsg ?: "Descarga español e inglés (unos 60 MB).",
-            done = vm.offlineReady, busy = vm.downloading, button = "Descargar",
-        ) { vm.downloadOffline() }
-
-        SetupStep(
-            n = 3, title = "Voz sin internet",
-            text = "En la pantalla que se abre, buscá \"Reconocimiento sin conexión\" o \"Idiomas sin conexión\" y descargá Español e English. Si tu celular no la muestra, no pasa nada: con internet funciona igual.",
-            done = false, button = "Abrir",
-        ) { openVoiceSettings(ctx) }
-
-        Spacer(Modifier.height(20.dp))
-        PrimaryButton("Empezar · Start", onClick = { vm.finishSetup() })
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Podés volver a esto cuando quieras desde Ajustes.",
-            color = Pal.Sub, fontSize = 13.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
-        )
-    }
-}
-
-@Composable
-private fun SetupStep(
-    n: Int, title: String, text: String, done: Boolean, button: String,
-    busy: Boolean = false, onClick: () -> Unit,
-) {
-    CardBox(
-        Modifier
-            .fillMaxWidth()
-            .padding(bottom = 12.dp),
-        accent = if (done) Pal.Ok else null,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(if (done) Pal.Ok.copy(alpha = 0.2f) else Pal.Card2),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (done) Icon(Icons.Rounded.CheckCircle, null, tint = Pal.Ok, modifier = Modifier.size(22.dp))
-                else Text("$n", color = Pal.Text, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, color = Pal.Text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                Spacer(Modifier.height(2.dp))
-                Text(text, color = Pal.Sub, fontSize = 13.sp, lineHeight = 18.sp)
-            }
-            Spacer(Modifier.width(10.dp))
-            when {
-                busy -> CircularProgressIndicator(color = Pal.Es, strokeWidth = 3.dp, modifier = Modifier.size(26.dp))
-                !done -> Box(
-                    Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Pal.Es.copy(alpha = 0.16f))
-                        .clickable(onClick = onClick)
-                        .padding(horizontal = 14.dp, vertical = 9.dp)
-                ) { Text(button, color = Pal.Es, fontWeight = FontWeight.SemiBold, fontSize = 14.sp) }
-            }
-        }
-    }
-}
-
-@Composable
-fun AppLogo(size: Int = 64) {
-    Box(
-        Modifier
-            .size(size.dp)
-            .clip(RoundedCornerShape((size * 0.3).dp))
-            .background(Brush.linearGradient(listOf(Pal.Es, Pal.En))),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(Icons.Rounded.Translate, null, tint = Color(0xFF07121E), modifier = Modifier.size((size * 0.52).dp))
-    }
-}
-
-// ═════════════════════════════════════════════════════════════
 // INICIO
 // ═════════════════════════════════════════════════════════════
 @Composable
@@ -349,142 +201,109 @@ fun HomeScreen(vm: AppViewModel) {
             .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AppLogo(52)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Romme Traductor", color = Pal.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Español", color = Pal.Es, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text("  ⇄  ", color = Pal.Sub, fontSize = 14.sp)
-                    Text("English", color = Pal.En, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 22.dp),
+        ) {
+            Spacer(Modifier.height(18.dp))
+            LogoCard(Modifier.fillMaxWidth())
+            Spacer(Modifier.height(24.dp))
+
+            // Con internet / sin conexión
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable { vm.updateOnline(!vm.online) }
+                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        l.t("Con internet / Sin conexión", "Online / Offline"),
+                        color = Pal.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp,
+                    )
+                    Text(
+                        if (vm.online) l.t("Con internet: traducción con IA", "Online: AI translation")
+                        else l.t("Sin conexión: funciona en cualquier lado", "Offline: works anywhere"),
+                        color = Pal.Sub, fontSize = 13.sp,
+                    )
                 }
+                Switch(
+                    checked = vm.online, onCheckedChange = { vm.updateOnline(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF34C759),
+                        uncheckedThumbColor = Color.White, uncheckedTrackColor = Pal.Card2,
+                    ),
+                )
             }
-            RoundIconButton(Icons.Rounded.Settings, "Ajustes", { vm.go(Screen.SETTINGS) })
+            Spacer(Modifier.height(18.dp))
+
+            BigColorButton(l.t("Modo\nindividual", "Solo\nmode"), Icons.Rounded.Person, Pal.Teal, Pal.TealLight) { vm.go(Screen.INDIVIDUAL) }
+            Spacer(Modifier.height(14.dp))
+            BigColorButton(l.t("Modo\ncompartido", "Shared\nmode"), Icons.Rounded.Groups, Pal.Wine, Pal.WineLight) { vm.go(Screen.SHARED) }
+            Spacer(Modifier.height(14.dp))
+            BigColorButton(l.t("Foto y texto", "Photo & text"), Icons.Rounded.CameraAlt, Pal.Gold, Pal.GoldLight) { vm.go(Screen.READ) }
+
+            Spacer(Modifier.height(16.dp))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable { if (!vm.offlineReady) vm.autoPrepare() }
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                val ok = vm.offlineReady
+                Box(
+                    Modifier
+                        .size(9.dp)
+                        .clip(CircleShape)
+                        .background(if (ok) Pal.Ok else Pal.Warn)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    when {
+                        ok -> l.t("Listo para usar sin internet", "Ready to use offline")
+                        vm.downloading -> l.t("Preparando el modo sin internet…", "Getting offline mode ready…")
+                        else -> l.t("El modo sin internet se prepara solo con wifi o datos", "Offline mode sets itself up with wifi or data")
+                    },
+                    color = Pal.Sub, fontSize = 13.sp,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
         }
 
-        Spacer(Modifier.height(22.dp))
-
-        // Selector de conexión
-        CardBox(Modifier.fillMaxWidth()) {
-            Column {
-                SmallLabel(l.t("Modo de traducción", "Translation mode"))
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ModeToggle(
-                        Modifier.weight(1f), selected = !vm.online,
-                        title = l.t("Sin conexión", "Offline"),
-                        sub = l.t("Funciona en cualquier lado", "Works anywhere"),
-                    ) { vm.updateOnline(false) }
-                    ModeToggle(
-                        Modifier.weight(1f), selected = vm.online,
-                        title = l.t("Con internet", "Online"),
-                        sub = l.t("IA: entiende el lunfardo", "AI: natural & slang"),
-                    ) { vm.updateOnline(true) }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(18.dp))
-        SmallLabel(l.t("Elegí cómo conversar", "Choose how to talk"))
-        Spacer(Modifier.height(10.dp))
-
-        ModeCard(
-            icon = Icons.Rounded.PhoneAndroid,
-            title = l.t("Modo individual", "Solo mode"),
-            text = l.t("Cada uno con su celular. Hablás y la voz lo dice en el otro idioma.", "Each person uses their own phone. You speak, it says it in the other language."),
-            accent = Pal.Es,
-        ) { vm.go(Screen.INDIVIDUAL) }
-
-        ModeCard(
-            icon = Icons.Rounded.Groups,
-            title = l.t("Modo compartido", "Shared mode"),
-            text = l.t("Un solo celular en la mesa, pantalla dividida para los dos.", "One phone on the table, split screen for both people."),
-            accent = Pal.En,
-        ) { vm.go(Screen.SHARED) }
-
-        ModeCard(
-            icon = Icons.Rounded.CameraAlt,
-            title = l.t("Foto y texto", "Photo & text"),
-            text = l.t("Traducí carteles, menús o mensajes escritos.", "Translate signs, menus or typed messages."),
-            accent = Color(0xFFB794F6),
-        ) { vm.go(Screen.READ) }
-
-        Spacer(Modifier.height(6.dp))
+        // Barra inferior
         Row(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable { if (!vm.offlineReady) vm.autoPrepare() }
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .background(Pal.Bg.copy(alpha = 0.85f))
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            val ok = vm.offlineReady
-            Box(
-                Modifier
-                    .size(9.dp)
-                    .clip(CircleShape)
-                    .background(if (ok) Pal.Ok else Pal.Warn)
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                when {
-                    ok -> l.t("Listo para usar sin internet", "Ready to use offline")
-                    vm.downloading -> l.t("Preparando el modo sin internet…", "Getting offline mode ready…")
-                    else -> l.t("El modo sin internet se prepara solo cuando haya wifi o datos", "Offline mode sets itself up when there's wifi or data")
-                },
-                color = Pal.Sub, fontSize = 13.sp,
-            )
+            NavItem(Icons.Rounded.Home, l.t("Inicio", "Home"), selected = true) {}
+            NavItem(Icons.Rounded.Groups, l.t("Compartido", "Shared"), selected = false) { vm.go(Screen.SHARED) }
+            NavItem(Icons.Rounded.Settings, l.t("Ajustes", "Settings"), selected = false) { vm.go(Screen.SETTINGS) }
         }
     }
 }
 
 @Composable
-private fun ModeToggle(modifier: Modifier, selected: Boolean, title: String, sub: String, onClick: () -> Unit) {
-    val c = if (selected) Pal.Ok else Pal.Line
+private fun NavItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
     Column(
-        modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (selected) Pal.Ok.copy(alpha = 0.10f) else Pal.Card2)
-            .border(if (selected) 2.dp else 1.dp, c, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-    ) {
-        Text(title, color = if (selected) Pal.Ok else Pal.Text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-        Spacer(Modifier.height(2.dp))
-        Text(sub, color = Pal.Sub, fontSize = 12.sp, lineHeight = 16.sp)
-    }
-}
-
-@Composable
-private fun ModeCard(icon: ImageVector, title: String, text: String, accent: Color, onClick: () -> Unit) {
-    Row(
         Modifier
-            .fillMaxWidth()
-            .padding(bottom = 12.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(Brush.horizontalGradient(listOf(accent.copy(alpha = 0.16f), Pal.Card)))
-            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(18.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 18.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            Modifier
-                .size(54.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(accent.copy(alpha = 0.22f)),
-            contentAlignment = Alignment.Center,
-        ) { Icon(icon, null, tint = accent, modifier = Modifier.size(28.dp)) }
-        Spacer(Modifier.width(16.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Pal.Text, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(3.dp))
-            Text(text, color = Pal.Sub, fontSize = 14.sp, lineHeight = 19.sp)
-        }
+        Icon(icon, label, tint = if (selected) Pal.Cyan else Pal.Sub, modifier = Modifier.size(28.dp))
+        Text(label, color = if (selected) Pal.Cyan else Pal.Sub, fontSize = 11.sp)
     }
 }
 
@@ -498,8 +317,9 @@ fun IndividualScreen(vm: AppViewModel) {
     val listening = vm.listeningLang == me
     val listState = rememberLazyListState()
 
-    LaunchedEffect(vm.turns.size) {
-        if (vm.turns.isNotEmpty()) listState.animateScrollToItem(vm.turns.size - 1)
+    LaunchedEffect(vm.turns.size, listening) {
+        val count = vm.turns.size + if (listening) 1 else 0
+        if (count > 0) listState.animateScrollToItem(count - 1)
     }
 
     Column(
@@ -511,21 +331,23 @@ fun IndividualScreen(vm: AppViewModel) {
         TopBar(me.t("Modo individual", "Solo mode"), onBack = { vm.go(Screen.HOME) }) {
             OnlineChip(vm.online, me) { vm.updateOnline(!vm.online) }
             Spacer(Modifier.width(8.dp))
+            AvatarBadge(40.dp)
+            Spacer(Modifier.width(8.dp))
         }
 
-        // Dirección de la traducción
+        // Idiomas
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            LangBadge(me, big = true)
-            Spacer(Modifier.width(10.dp))
-            RoundIconButton(Icons.Rounded.SwapHoriz, "Cambiar idioma", { vm.updateMyLang(me.other) }, size = 40.dp)
-            Spacer(Modifier.width(10.dp))
-            LangBadge(me.other, big = true)
+            LangPill(me)
+            Spacer(Modifier.width(12.dp))
+            RoundIconButton(Icons.Rounded.SwapHoriz, "Cambiar idioma", { vm.updateMyLang(me.other) }, size = 50.dp, tint = Pal.Cyan)
+            Spacer(Modifier.width(12.dp))
+            LangPill(me.other)
         }
 
         // Conversación
@@ -541,27 +363,39 @@ fun IndividualScreen(vm: AppViewModel) {
                         .padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Icon(Icons.Rounded.RecordVoiceOver, null, tint = Pal.Sub.copy(alpha = 0.6f), modifier = Modifier.size(54.dp))
-                    Spacer(Modifier.height(12.dp))
                     Text(
-                        me.t("Tocá el micrófono y hablá en español.\nLa voz lo va a decir en inglés.", "Tap the mic and speak English.\nThe voice will say it in Spanish."),
-                        color = Pal.Sub, fontSize = 16.sp, textAlign = TextAlign.Center, lineHeight = 22.sp,
+                        me.t("Tocá el micrófono y hablá en español.", "Tap the mic and speak English."),
+                        color = Pal.Text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        me.t("Tocá de nuevo para terminar y la voz lo dice en inglés.", "Tap again to finish and the voice says it in Spanish."),
+                        color = Pal.Sub, fontSize = 15.sp, textAlign = TextAlign.Center,
                     )
                 }
             }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 items(vm.turns, key = { it.id }) { turn ->
-                    TurnCard(turn, highlight = turn == vm.turns.lastOrNull(), onReplay = { vm.replay(turn) })
+                    val last = turn == vm.turns.lastOrNull() && !listening
+                    if (last) MainTurnCard(turn) { vm.replay(turn) }
+                    else SmallTurnCard(turn) { vm.replay(turn) }
                 }
-                if (listening && vm.liveText.isNotBlank()) {
+                if (listening) {
                     item {
-                        CardBox(Modifier.fillMaxWidth(), accent = me.color) {
-                            Text(vm.liveText, color = Pal.Text.copy(alpha = 0.8f), fontSize = 20.sp)
+                        CardBox(Modifier.fillMaxWidth(), accent = Pal.Cyan) {
+                            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                SmallLabel(me.t("Te escucho…", "Listening…"), color = Pal.Cyan)
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    vm.liveText.ifBlank { "…" },
+                                    style = BigText.copy(fontSize = 24.sp), textAlign = TextAlign.Center,
+                                )
+                            }
                         }
                     }
                 }
@@ -572,58 +406,95 @@ fun IndividualScreen(vm: AppViewModel) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(bottom = 10.dp),
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            RoundIconButton(Icons.Rounded.DeleteSweep, "Borrar", { vm.clearTurns() }, tint = Pal.Sub, size = 52.dp)
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                MicButton(
-                    lang = me,
-                    listening = listening,
-                    working = vm.workingLang == me,
-                    level = vm.micLevel,
-                    onClick = { mic(me) },
-                )
-                Text(
-                    when {
-                        listening -> me.t("Escuchando… tocá para terminar", "Listening… tap to finish")
-                        vm.workingLang == me -> me.t("Traduciendo…", "Translating…")
-                        vm.speaker.speaking -> me.t("Hablando…", "Speaking…")
-                        else -> me.t("Tocá y hablá", "Tap and speak")
-                    },
-                    color = Pal.Sub, fontSize = 13.sp,
-                )
-            }
-            RoundIconButton(Icons.Rounded.Keyboard, "Foto y texto", { vm.go(Screen.READ) }, tint = Pal.Sub, size = 52.dp)
+            RoundIconButton(Icons.Rounded.DeleteSweep, "Borrar", { vm.clearTurns() }, tint = Pal.Sub, size = 50.dp)
+            MicButton(
+                lang = me,
+                listening = listening,
+                working = vm.workingLang == me,
+                level = vm.micLevel,
+                onClick = { mic(me) },
+            )
+            RoundIconButton(Icons.Rounded.CameraAlt, "Foto y texto", { vm.go(Screen.READ) }, tint = Pal.GoldLight, size = 50.dp)
         }
+        Text(
+            when {
+                listening -> me.t("Escuchando… tocá para terminar", "Listening… tap to finish")
+                vm.workingLang == me -> me.t("Traduciendo…", "Translating…")
+                vm.speaker.speaking -> me.t("Hablando…", "Speaking…")
+                else -> me.t("Tocá para hablar", "Tap to speak")
+            },
+            color = if (listening) Pal.Cyan else Pal.Text,
+            fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** La última traducción, grande, como en el diseño. */
+@Composable
+private fun MainTurnCard(turn: Turn, onReplay: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 30.dp)
+    ) {
+        CardBox(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                SmallLabel("Texto traducido / Translated Text")
+                Spacer(Modifier.height(10.dp))
+                Text(turn.original, style = BigText.copy(fontSize = 24.sp, lineHeight = 30.sp), textAlign = TextAlign.Center)
+                Spacer(Modifier.height(12.dp))
+                Box(
+                    Modifier
+                        .width(48.dp)
+                        .height(2.dp)
+                        .background(Pal.Sub.copy(alpha = 0.5f))
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    turn.translated,
+                    style = BigText.copy(fontSize = 30.sp, lineHeight = 36.sp, color = Pal.Cyan),
+                    textAlign = TextAlign.Center,
+                )
+                if (turn.online) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("IA", color = Pal.Ok, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = 28.dp)
+        ) { SpeakerButton(onReplay) }
     }
 }
 
 @Composable
-private fun TurnCard(turn: Turn, highlight: Boolean, onReplay: () -> Unit) {
-    val target = turn.from.other
-    CardBox(Modifier.fillMaxWidth(), accent = if (highlight) target.color else null) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(turn.from.flag, fontSize = 14.sp)
-                Spacer(Modifier.width(6.dp))
-                Text(turn.original, color = Pal.Sub, fontSize = 14.sp, modifier = Modifier.weight(1f))
+private fun SmallTurnCard(turn: Turn, onReplay: () -> Unit) {
+    CardBox(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FlagCircle(turn.from, 24.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(turn.original, color = Pal.Sub, fontSize = 14.sp)
+                Spacer(Modifier.height(2.dp))
+                Text(turn.translated, color = Pal.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.Top) {
-                Text(
-                    turn.translated,
-                    style = if (highlight) BigText.copy(color = target.color) else BigText.copy(fontSize = 19.sp, lineHeight = 25.sp),
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                RoundIconButton(Icons.AutoMirrored.Rounded.VolumeUp, "Repetir", onReplay, tint = target.color, size = 40.dp, bg = Pal.Card2)
-            }
-            if (turn.online) {
-                Spacer(Modifier.height(6.dp))
-                Text("IA", color = Pal.Ok, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
+            Spacer(Modifier.width(8.dp))
+            RoundIconButton(Icons.AutoMirrored.Rounded.VolumeUp, "Repetir", onReplay, tint = Pal.Cyan, size = 40.dp, bg = Pal.Bg2)
         }
     }
 }
@@ -649,27 +520,26 @@ fun SharedScreen(vm: AppViewModel) {
                 .weight(1f)
                 .fillMaxWidth()
                 .rotate(180f)
-        ) {
-            SharedHalf(vm, top) { mic(top) }
-        }
+        ) { SharedHalf(vm, top) { mic(top) } }
 
         // Barra del medio
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(Pal.Bg)
+                .background(Pal.Bg.copy(alpha = 0.9f))
+                .border(1.dp, Pal.Line)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            RoundIconButton(Icons.Rounded.Home, "Inicio", { vm.go(Screen.HOME) }, size = 40.dp)
+            RoundIconButton(Icons.Rounded.Home, "Inicio", { vm.go(Screen.HOME) }, size = 42.dp)
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 OnlineChip(vm.online, bottom) { vm.updateOnline(!vm.online) }
             }
             Spacer(Modifier.width(8.dp))
-            RoundIconButton(Icons.Rounded.DeleteSweep, "Borrar", { vm.clearTurns() }, tint = Pal.Sub, size = 40.dp)
+            RoundIconButton(Icons.Rounded.DeleteSweep, "Borrar", { vm.clearTurns() }, tint = Pal.Sub, size = 42.dp)
             Spacer(Modifier.width(8.dp))
-            RoundIconButton(Icons.Rounded.SwapVert, "Invertir", { vm.swapShared() }, size = 40.dp)
+            RoundIconButton(Icons.Rounded.SwapVert, "Invertir", { vm.swapShared() }, size = 42.dp, tint = Pal.Cyan)
         }
 
         // Mitad de abajo
@@ -677,9 +547,7 @@ fun SharedScreen(vm: AppViewModel) {
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-        ) {
-            SharedHalf(vm, bottom) { mic(bottom) }
-        }
+        ) { SharedHalf(vm, bottom) { mic(bottom) } }
     }
 }
 
@@ -692,48 +560,56 @@ private fun SharedHalf(vm: AppViewModel, lang: Lang, onMic: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(lang.color.copy(alpha = 0.10f), Color.Transparent)))
-            .padding(horizontal = 18.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(horizontal = 20.dp, vertical = 10.dp),
     ) {
-        LangBadge(lang)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FlagCircle(lang, 34.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                when {
+                    listening -> lang.t("Te escucho…", "Listening…")
+                    last != null && last.from == lang.other -> lang.t("Te dijo:", "They said:")
+                    last != null -> lang.t("Dijiste:", "You said:")
+                    else -> lang.t("Tu idioma: español", "Your language: English")
+                },
+                color = if (listening) Pal.Cyan else Pal.Sub, fontSize = 15.sp,
+                modifier = Modifier.weight(1f),
+            )
+            if (last != null && last.from == lang.other && !listening) {
+                SpeakerButton({ vm.replay(last) }, size = 46.dp)
+            }
+        }
         Box(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            contentAlignment = Alignment.Center,
+                .padding(vertical = 6.dp),
+            contentAlignment = Alignment.CenterStart,
         ) {
             when {
                 listening -> Text(
-                    vm.liveText.ifBlank { lang.t("Te escucho… tocá de nuevo para terminar", "Listening… tap again to finish") },
-                    style = BigText.copy(color = Pal.Text.copy(alpha = 0.85f)), textAlign = TextAlign.Center,
+                    vm.liveText.ifBlank { "…" },
+                    style = BigText.copy(fontSize = 28.sp, lineHeight = 34.sp, color = Pal.Text.copy(alpha = 0.9f)),
                 )
                 last == null -> Text(
-                    lang.t("Tocá el micrófono y hablá en español", "Tap the mic and speak English"),
-                    color = Pal.Sub, fontSize = 17.sp, textAlign = TextAlign.Center,
+                    lang.t("Tocá el micrófono y hablá", "Tap the mic and speak"),
+                    color = Pal.Sub, fontSize = 20.sp,
                 )
-                // Lo que dijo la otra persona, traducido para mí
-                last.from == lang.other -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    SmallLabel(lang.t("Te dijo", "They said"), color = lang.color)
+                last.from == lang.other -> Text(
+                    last.translated,
+                    style = BigText.copy(fontSize = 34.sp, lineHeight = 40.sp),
+                    modifier = Modifier.clickable { vm.replay(last) },
+                )
+                else -> Column {
+                    Text(last.original, color = Pal.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
-                    Text(
-                        last.translated, style = BigText.copy(fontSize = 28.sp, lineHeight = 34.sp),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.clickable { vm.replay(last) },
-                    )
-                }
-                // Lo que dije yo
-                else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    SmallLabel(lang.t("Dijiste", "You said"))
-                    Spacer(Modifier.height(6.dp))
-                    Text(last.original, color = Pal.Text, fontSize = 20.sp, textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(6.dp))
-                    Text("→ " + last.translated, color = Pal.Sub, fontSize = 15.sp, textAlign = TextAlign.Center)
+                    Text("→ " + last.translated, color = Pal.Sub, fontSize = 16.sp)
                 }
             }
         }
-        MicButton(lang, listening, working, vm.micLevel, onMic, size = 92.dp)
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            MicButton(lang, listening, working, vm.micLevel, onMic, size = 84.dp)
+        }
     }
 }
 
@@ -779,27 +655,31 @@ fun ReadScreen(vm: AppViewModel) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Pal.Card)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Pal.Card.copy(alpha = 0.9f))
+                    .border(1.dp, Pal.Line, RoundedCornerShape(18.dp))
                     .padding(4.dp)
             ) {
-                listOf(me.t("Foto", "Photo") to Icons.Rounded.CameraAlt, me.t("Escribir", "Type") to Icons.Rounded.Keyboard)
-                    .forEachIndexed { i, (label, icon) ->
-                        Row(
-                            Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (tab == i) Pal.Card2 else Color.Transparent)
-                                .clickable { tab = i }
-                                .padding(vertical = 11.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(icon, null, tint = if (tab == i) Pal.Text else Pal.Sub, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(label, color = if (tab == i) Pal.Text else Pal.Sub, fontWeight = FontWeight.SemiBold)
-                        }
+                val tabs = listOf(
+                    Pair(me.t("Foto", "Photo"), Icons.Rounded.CameraAlt),
+                    Pair(me.t("Escribir", "Type"), Icons.Rounded.Keyboard),
+                )
+                tabs.forEachIndexed { i, pair ->
+                    Row(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (tab == i) Pal.Gold else Color.Transparent)
+                            .clickable { tab = i }
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(pair.second, null, tint = if (tab == i) Color.White else Pal.Sub, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(pair.first, color = if (tab == i) Color.White else Pal.Sub, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
+                }
             }
 
             Spacer(Modifier.height(14.dp))
@@ -808,16 +688,16 @@ fun ReadScreen(vm: AppViewModel) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                LangBadge(vm.readFrom, big = true)
-                Spacer(Modifier.width(10.dp))
-                RoundIconButton(Icons.Rounded.SwapHoriz, "Cambiar", { vm.swapRead() }, size = 40.dp)
-                Spacer(Modifier.width(10.dp))
-                LangBadge(vm.readFrom.other, big = true)
+                LangPill(vm.readFrom)
+                Spacer(Modifier.width(12.dp))
+                RoundIconButton(Icons.Rounded.SwapHoriz, "Cambiar", { vm.swapRead() }, size = 48.dp, tint = Pal.Cyan)
+                Spacer(Modifier.width(12.dp))
+                LangPill(vm.readFrom.other)
             }
             Spacer(Modifier.height(14.dp))
 
             if (tab == 0) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     BigAction(Modifier.weight(1f), Icons.Rounded.CameraAlt, me.t("Sacar foto", "Take photo")) {
                         val dir = File(ctx.cacheDir, "fotos").apply { mkdirs() }
                         val f = File(dir, "foto_${System.currentTimeMillis()}.jpg")
@@ -841,12 +721,12 @@ fun ReadScreen(vm: AppViewModel) {
                         .fillMaxWidth()
                         .height(140.dp),
                     placeholder = { Text(vm.readFrom.t("Escribí acá…", "Type here…"), color = Pal.Sub) },
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 18.sp, color = Pal.Text),
+                    textStyle = TextStyle(fontSize = 18.sp, color = Pal.Text),
                     shape = RoundedCornerShape(18.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = vm.readFrom.color,
+                        focusedBorderColor = Pal.Cyan,
                         unfocusedBorderColor = Pal.Line,
-                        cursorColor = vm.readFrom.color,
+                        cursorColor = Pal.Cyan,
                         focusedContainerColor = Pal.Card,
                         unfocusedContainerColor = Pal.Card,
                     ),
@@ -854,7 +734,7 @@ fun ReadScreen(vm: AppViewModel) {
                 Spacer(Modifier.height(10.dp))
                 PrimaryButton(
                     me.t("Traducir", "Translate"), onClick = { vm.translateTyped(typed) },
-                    color = vm.readFrom.other.color, enabled = typed.isNotBlank() && !vm.readBusy,
+                    color = Pal.Cyan, enabled = typed.isNotBlank() && !vm.readBusy,
                     icon = Icons.Rounded.Translate,
                 )
             }
@@ -865,13 +745,17 @@ fun ReadScreen(vm: AppViewModel) {
                     Modifier
                         .fillMaxWidth()
                         .padding(24.dp), contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator(color = vm.readFrom.other.color) }
+                ) { CircularProgressIndicator(color = Pal.Cyan) }
             }
             if (vm.readOriginal.isNotBlank()) {
                 CardBox(Modifier.fillMaxWidth()) {
                     Column {
-                        SmallLabel(vm.readFrom.flag + "  " + vm.readFrom.label)
-                        Spacer(Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            FlagCircle(vm.readFrom, 22.dp)
+                            Spacer(Modifier.width(8.dp))
+                            SmallLabel(vm.readFrom.label)
+                        }
+                        Spacer(Modifier.height(8.dp))
                         Text(vm.readOriginal, color = Pal.Sub, fontSize = 15.sp, lineHeight = 21.sp)
                     }
                 }
@@ -879,18 +763,22 @@ fun ReadScreen(vm: AppViewModel) {
             }
             if (vm.readTranslated.isNotBlank()) {
                 val to = vm.readFrom.other
-                CardBox(Modifier.fillMaxWidth(), accent = to.color) {
+                CardBox(Modifier.fillMaxWidth(), accent = Pal.Cyan) {
                     Column {
-                        SmallLabel(to.flag + "  " + to.label, color = to.color)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            FlagCircle(to, 22.dp)
+                            Spacer(Modifier.width(8.dp))
+                            SmallLabel(to.label, color = Pal.Cyan)
+                        }
                         Spacer(Modifier.height(8.dp))
-                        Text(vm.readTranslated, style = BigText.copy(fontSize = 21.sp, lineHeight = 28.sp))
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            RoundIconButton(Icons.AutoMirrored.Rounded.VolumeUp, "Escuchar", { vm.speakText(vm.readTranslated, to) }, tint = to.color, bg = Pal.Card2)
+                        Text(vm.readTranslated, style = BigText.copy(fontSize = 22.sp, lineHeight = 29.sp, color = Pal.Cyan))
+                        Spacer(Modifier.height(14.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            SpeakerButton({ vm.speakText(vm.readTranslated, to) }, size = 50.dp)
                             RoundIconButton(Icons.Rounded.ContentCopy, "Copiar", {
                                 clipboard.setText(AnnotatedString(vm.readTranslated))
                                 vm.notice = me.t("Copiado", "Copied")
-                            }, tint = Pal.Sub, bg = Pal.Card2)
+                            }, tint = Pal.Sub, bg = Pal.Bg2)
                         }
                     }
                 }
@@ -905,15 +793,15 @@ private fun BigAction(modifier: Modifier, icon: ImageVector, label: String, onCl
     Column(
         modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(Pal.Card)
-            .border(1.dp, Pal.Line, RoundedCornerShape(20.dp))
+            .background(Brush.verticalGradient(listOf(Pal.GoldLight.copy(alpha = 0.35f), Pal.Gold.copy(alpha = 0.55f))))
+            .border(2.dp, Pal.GoldLight.copy(alpha = 0.8f), RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 26.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, null, tint = Pal.Text, modifier = Modifier.size(34.dp))
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(36.dp))
         Spacer(Modifier.height(8.dp))
-        Text(label, color = Pal.Text, fontWeight = FontWeight.SemiBold)
+        Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
     }
 }
 
@@ -946,7 +834,6 @@ fun SettingsScreen(vm: AppViewModel) {
                 .padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Idioma
             CardBox(Modifier.fillMaxWidth()) {
                 Column {
                     SmallLabel(me.t("Idioma de este celular", "This phone's language"))
@@ -957,16 +844,14 @@ fun SettingsScreen(vm: AppViewModel) {
                             Box(
                                 Modifier
                                     .clip(RoundedCornerShape(50))
-                                    .border(2.dp, if (sel) l.color else Color.Transparent, RoundedCornerShape(50))
-                                    .clickable { vm.updateMyLang(l) }
+                                    .border(2.dp, if (sel) Pal.Cyan else Color.Transparent, RoundedCornerShape(50))
                                     .padding(2.dp)
-                            ) { LangBadge(l, big = true) }
+                            ) { LangPill(l) { vm.updateMyLang(l) } }
                         }
                     }
                 }
             }
 
-            // Voz
             CardBox(Modifier.fillMaxWidth()) {
                 Column {
                     SmallLabel(me.t("Voz", "Voice"))
@@ -978,7 +863,7 @@ fun SettingsScreen(vm: AppViewModel) {
                         value = vm.speechRate,
                         onValueChange = { vm.updateSpeechRate((it * 10).toInt() / 10f) },
                         valueRange = 0.6f..1.5f,
-                        colors = SliderDefaults.colors(thumbColor = Pal.Es, activeTrackColor = Pal.Es),
+                        colors = SliderDefaults.colors(thumbColor = Pal.Cyan, activeTrackColor = Pal.Cyan),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         SmallButton(me.t("Probar voz ES", "Test ES voice")) { vm.speakText("Hola, ¿cómo andás? Bienvenidos a la Argentina.", Lang.ES) }
@@ -996,7 +881,6 @@ fun SettingsScreen(vm: AppViewModel) {
                 }
             }
 
-            // Sin internet
             CardBox(Modifier.fillMaxWidth(), accent = if (vm.offlineReady) Pal.Ok else Pal.Warn) {
                 Column {
                     SmallLabel(me.t("Uso sin internet", "Offline use"))
@@ -1008,39 +892,26 @@ fun SettingsScreen(vm: AppViewModel) {
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            if (vm.offlineReady) me.t("Traducción sin internet lista", "Offline translation ready")
-                            else me.t("Falta descargar los idiomas", "Languages not downloaded"),
+                            when {
+                                vm.offlineReady -> me.t("Traducción sin internet lista", "Offline translation ready")
+                                vm.downloading -> me.t("Preparando…", "Preparing…")
+                                else -> me.t("Se prepara sola con wifi o datos", "Sets itself up with wifi or data")
+                            },
                             color = Pal.Text, fontSize = 15.sp, modifier = Modifier.weight(1f),
                         )
-                        if (vm.downloading) CircularProgressIndicator(color = Pal.Es, strokeWidth = 3.dp, modifier = Modifier.size(22.dp))
-                    }
-                    vm.downloadMsg?.let {
-                        Spacer(Modifier.height(6.dp))
-                        Text(it, color = Pal.Sub, fontSize = 13.sp)
+                        if (vm.downloading) CircularProgressIndicator(color = Pal.Cyan, strokeWidth = 3.dp, modifier = Modifier.size(22.dp))
                     }
                     Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (!vm.offlineReady) SmallButton(me.t("Descargar idiomas", "Download languages")) { vm.downloadOffline() }
-                        SmallButton(me.t("Voz sin internet", "Offline speech")) { openVoiceSettings(ctx) }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        me.t(
-                            "\"Voz sin internet\": descargá Español e English en \"Reconocimiento sin conexión\".",
-                            "\"Offline speech\": download English and Spanish under \"Offline speech recognition\".",
-                        ),
-                        color = Pal.Sub, fontSize = 12.sp, lineHeight = 17.sp,
-                    )
+                    SmallButton(me.t("Voz sin internet (avanzado)", "Offline speech (advanced)")) { openVoiceSettings(ctx) }
                 }
             }
 
-            // Con internet (IA)
             CardBox(Modifier.fillMaxWidth()) {
                 Column {
                     SmallLabel(me.t("Modo con internet (IA)", "Online mode (AI)"))
                     Spacer(Modifier.height(8.dp))
                     SwitchRow(me.t("Usar IA cuando hay internet", "Use AI when online"), vm.online) { vm.updateOnline(it) }
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         if (vm.hasBuiltInKey) me.t("✓ La IA ya viene incluida. No hace falta hacer nada.", "✓ AI is built in. Nothing to set up.")
                         else me.t("Esta versión no trae la IA incluida.", "This version has no built-in AI."),
@@ -1051,7 +922,9 @@ fun SettingsScreen(vm: AppViewModel) {
                     Text(
                         if (advanced) me.t("Ocultar opciones avanzadas", "Hide advanced") else me.t("Opciones avanzadas", "Advanced options"),
                         color = Pal.Sub, fontSize = 13.sp,
-                        modifier = Modifier.clickable { advanced = !advanced }.padding(vertical = 6.dp),
+                        modifier = Modifier
+                            .clickable { advanced = !advanced }
+                            .padding(vertical = 6.dp),
                     )
                     if (advanced) {
                         Spacer(Modifier.height(6.dp))
@@ -1063,8 +936,8 @@ fun SettingsScreen(vm: AppViewModel) {
             }
 
             Text(
-                "Versión 0.2",
-                color = Pal.Sub.copy(alpha = 0.6f), fontSize = 12.sp,
+                "Romme Traductor · versión 0.3",
+                color = Pal.Sub.copy(alpha = 0.7f), fontSize = 12.sp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 10.dp),
@@ -1080,7 +953,7 @@ private fun SwitchRow(text: String, checked: Boolean, onChange: (Boolean) -> Uni
         Text(text, color = Pal.Text, fontSize = 15.sp, modifier = Modifier.weight(1f))
         Switch(
             checked = checked, onCheckedChange = onChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Pal.Ok),
+            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF34C759)),
         )
     }
 }
@@ -1105,16 +978,16 @@ private fun SettingsField(value: String, onChange: (String) -> Unit, label: Stri
         label = { Text(label) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
-        visualTransformation = if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
         shape = RoundedCornerShape(14.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Pal.Es,
+            focusedBorderColor = Pal.Cyan,
             unfocusedBorderColor = Pal.Line,
-            focusedLabelColor = Pal.Es,
+            focusedLabelColor = Pal.Cyan,
             unfocusedLabelColor = Pal.Sub,
             focusedTextColor = Pal.Text,
             unfocusedTextColor = Pal.Text,
-            cursorColor = Pal.Es,
+            cursorColor = Pal.Cyan,
         ),
     )
 }
