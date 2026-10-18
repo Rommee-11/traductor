@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dos globos de diálogo: celeste (español) y ámbar (inglés) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Globo celeste -->
+    <path
+        android:fillColor="#4FC3F7"
+        android:pathData="M33,30 H61 A7,7 0 0 1 68,37 V53 A7,7 0 0 1 61,60 H44 L36,67 V60 H33 A7,7 0 0 1 26,53 V37 A7,7 0 0 1 33,30 Z" />
+    <path
+        android:fillColor="#0E1730"
+        android:pathData="M34,40 H58 V43 H34 Z M34,47 H52 V50 H34 Z" />
+    <!-- Globo ámbar -->
+    <path
+        android:fillColor="#FFB547"
+        android:pathData="M49,46 H75 A7,7 0 0 1 82,53 V68 A7,7 0 0 1 75,75 H72 V82 L64,75 H49 A7,7 0 0 1 42,68 V53 A7,7 0 0 1 49,46 Z" />
+    <path
+        android:fillColor="#0E1730"
+        android:pathData="M50,56 H74 V59 H50 Z M56,63 H74 V66 H56 Z" />
+</vector>
