@@ -12,8 +12,13 @@ android {
         applicationId = "com.romme.traductor"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 2
+        versionName = "0.2"
+
+        // Clave de IA incluida en la app. Viene de los "Secrets" de GitHub,
+        // así nunca queda escrita en el código.
+        val geminiKey = System.getenv("GEMINI_API_KEY") ?: ""
+        buildConfigField("String", "GEMINI_KEY", "\"$geminiKey\"")
     }
 
     // Llave fija para que cada versión nueva se instale ENCIMA de la anterior
@@ -42,6 +47,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources {

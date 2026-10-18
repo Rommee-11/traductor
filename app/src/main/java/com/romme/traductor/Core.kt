@@ -42,11 +42,16 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putBoolean("setupDone", v).apply()
 
     var online: Boolean
-        get() = sp.getBoolean("online", false)
+        get() = sp.getBoolean("online", true)
         set(v) = sp.edit().putBoolean("online", v).apply()
 
     var myLang: Lang
-        get() = if (sp.getString("myLang", "es") == "en") Lang.EN else Lang.ES
+        get() {
+            // La primera vez se elige solo, según el idioma del celular
+            val saved = sp.getString("myLang", null)
+                ?: if (Locale.getDefault().language == "es") "es" else "en"
+            return if (saved == "en") Lang.EN else Lang.ES
+        }
         set(v) = sp.edit().putString("myLang", if (v == Lang.EN) "en" else "es").apply()
 
     var apiKey: String

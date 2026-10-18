@@ -418,7 +418,7 @@ fun HomeScreen(vm: AppViewModel) {
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .clickable { if (!vm.offlineReady) vm.go(Screen.SETTINGS) }
+                .clickable { if (!vm.offlineReady) vm.autoPrepare() }
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -431,8 +431,11 @@ fun HomeScreen(vm: AppViewModel) {
             )
             Spacer(Modifier.width(10.dp))
             Text(
-                if (ok) l.t("Listo para traducir sin internet", "Ready to translate offline")
-                else l.t("Falta descargar los idiomas sin internet · tocá acá", "Offline languages not downloaded · tap here"),
+                when {
+                    ok -> l.t("Listo para usar sin internet", "Ready to use offline")
+                    vm.downloading -> l.t("Preparando el modo sin internet…", "Getting offline mode ready…")
+                    else -> l.t("El modo sin internet se prepara solo cuando haya wifi o datos", "Offline mode sets itself up when there's wifi or data")
+                },
                 color = Pal.Sub, fontSize = 13.sp,
             )
         }
@@ -1039,21 +1042,28 @@ fun SettingsScreen(vm: AppViewModel) {
                     SwitchRow(me.t("Usar IA cuando hay internet", "Use AI when online"), vm.online) { vm.updateOnline(it) }
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        me.t(
-                            "Pegá tu clave gratuita de Google AI Studio (aistudio.google.com). Se guarda solo en este celular.",
-                            "Paste your free Google AI Studio key (aistudio.google.com). It stays on this phone only.",
-                        ),
-                        color = Pal.Sub, fontSize = 13.sp, lineHeight = 18.sp,
+                        if (vm.hasBuiltInKey) me.t("✓ La IA ya viene incluida. No hace falta hacer nada.", "✓ AI is built in. Nothing to set up.")
+                        else me.t("Esta versión no trae la IA incluida.", "This version has no built-in AI."),
+                        color = if (vm.hasBuiltInKey) Pal.Ok else Pal.Warn, fontSize = 14.sp,
                     )
+                    var advanced by remember { mutableStateOf(false) }
                     Spacer(Modifier.height(8.dp))
-                    SettingsField(keyText, { keyText = it; vm.updateApiKey(it) }, me.t("Clave de IA", "AI key"), secret = true)
-                    Spacer(Modifier.height(8.dp))
-                    SettingsField(modelText, { modelText = it; vm.updateModel(it) }, me.t("Modelo", "Model"))
+                    Text(
+                        if (advanced) me.t("Ocultar opciones avanzadas", "Hide advanced") else me.t("Opciones avanzadas", "Advanced options"),
+                        color = Pal.Sub, fontSize = 13.sp,
+                        modifier = Modifier.clickable { advanced = !advanced }.padding(vertical = 6.dp),
+                    )
+                    if (advanced) {
+                        Spacer(Modifier.height(6.dp))
+                        SettingsField(keyText, { keyText = it; vm.updateApiKey(it) }, me.t("Clave propia (opcional)", "Own key (optional)"), secret = true)
+                        Spacer(Modifier.height(8.dp))
+                        SettingsField(modelText, { modelText = it; vm.updateModel(it) }, me.t("Modelo", "Model"))
+                    }
                 }
             }
 
             Text(
-                "Versión 0.1",
+                "Versión 0.2",
                 color = Pal.Sub.copy(alpha = 0.6f), fontSize = 12.sp,
                 modifier = Modifier
                     .fillMaxWidth()

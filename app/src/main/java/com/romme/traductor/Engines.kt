@@ -2,17 +2,22 @@ package com.romme.traductor
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.RecognitionListener
+import android.speech.RecognitionSupport
+import android.speech.RecognitionSupportCallback
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.common.model.RemoteModelManager
 import com.google.mlkit.nl.translate.TranslateLanguage
@@ -143,10 +148,37 @@ class SpeechListener(private val context: Context) {
         onResult: (String) -> Unit,
         onError: (Int) -> Unit,
     ) {
+        // Sin internet: primero probamos la voz offline del sistema (Android 12+);
+        // si no tiene el idioma, probamos el reconocedor común en modo offline.
+        val onDevice = preferOffline && Build.VERSION.SDK_INT >= 31 &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        begin(lang, preferOffline, onDevice, onPartial, onLevel, onResult) { code ->
+            if (onDevice && code in listOf(SpeechRecognizer.ERROR_CLIENT, 12, 13)) {
+                begin(lang, true, false, onPartial, onLevel, onResult, onError)
+            } else {
+                onError(code)
+            }
+        }
+    }
+
+    private fun begin(
+        lang: Lang,
+        preferOffline: Boolean,
+        onDevice: Boolean,
+        onPartial: (String) -> Unit,
+        onLevel: (Float) -> Unit,
+        onResult: (String) -> Unit,
+        onError: (Int) -> Unit,
+    ) {
         destroy()
-        val rec = SpeechRecognizer.createSpeechRecognizer(context)
+        val rec = if (onDevice && Build.VERSION.SDK_INT >= 31) {
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        } else {
+            SpeechRecognizer.createSpeechRecognizer(context)
+        }
         recognizer = rec
         var finished = false
+        var heardSomething = false
         rec.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBeginningOfSpeech() {}
@@ -158,20 +190,27 @@ class SpeechListener(private val context: Context) {
             override fun onError(error: Int) {
                 if (finished) return
                 finished = true
-                onError(error)
+                // Si ya había texto parcial, lo usamos en vez de perderlo
+                if (heardSomething && lastPartial.isNotBlank()) onResult(lastPartial) else onError(error)
             }
             override fun onResults(results: Bundle?) {
                 if (finished) return
                 finished = true
-                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                    ?.ifBlank { null } ?: lastPartial
                 onResult(text)
             }
             override fun onPartialResults(partialResults: Bundle?) {
                 val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                if (!text.isNullOrBlank()) onPartial(text)
+                if (!text.isNullOrBlank()) {
+                    heardSomething = true
+                    lastPartial = text
+                    onPartial(text)
+                }
             }
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
+        lastPartial = ""
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang.tag)
@@ -185,6 +224,8 @@ class SpeechListener(private val context: Context) {
         rec.startListening(intent)
     }
 
+    private var lastPartial = ""
+
     /** Termina de escuchar y procesa lo que se dijo. */
     fun stop() {
         recognizer?.stopListening()
@@ -196,6 +237,58 @@ class SpeechListener(private val context: Context) {
             it.destroy()
         }
         recognizer = null
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// VOZ SIN INTERNET: pide al celular que descargue el idioma solo
+// (Android 13 o más nuevo). En celulares más viejos no hace nada.
+// ─────────────────────────────────────────────────────────────
+object OfflineSpeech {
+    fun ensure(context: Context, lang: Lang) {
+        if (Build.VERSION.SDK_INT < 33) return
+        Handler(Looper.getMainLooper()).post { ensure33(context, lang) }
+    }
+
+    @RequiresApi(33)
+    private fun ensure33(context: Context, lang: Lang) {
+        try {
+            if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) return
+            val rec = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+            val base = lang.tag.substring(0, 2)
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang.tag)
+            val main = Handler(Looper.getMainLooper())
+            rec.checkRecognitionSupport(intent, ContextCompat.getMainExecutor(context), object : RecognitionSupportCallback {
+                override fun onSupportResult(support: RecognitionSupport) {
+                    try {
+                        fun List<String>.has() = any { it.startsWith(base, ignoreCase = true) }
+                        // Android 14 cambió los nombres de estas listas
+                        @Suppress("DEPRECATION")
+                        val installed = if (Build.VERSION.SDK_INT >= 34) support.installedOnDeviceLanguages else support.installedLanguages
+                        @Suppress("DEPRECATION")
+                        val pending = if (Build.VERSION.SDK_INT >= 34) support.pendingOnDeviceLanguages else support.pendingLanguages
+                        @Suppress("DEPRECATION")
+                        val supported = if (Build.VERSION.SDK_INT >= 34) support.supportedOnDeviceLanguages else support.supportedLanguages
+                        val ready = installed.has() || pending.has()
+                        if (!ready && supported.has()) {
+                            val pick = supported.firstOrNull { it.equals(lang.tag, ignoreCase = true) }
+                                ?: (if (lang == Lang.ES) supported.firstOrNull { it.equals("es-US", true) || it.equals("es-419", true) } else null)
+                                ?: supported.first { it.startsWith(base, ignoreCase = true) }
+                            rec.triggerModelDownload(Intent(intent).putExtra(RecognizerIntent.EXTRA_LANGUAGE, pick))
+                        }
+                    } catch (_: Throwable) {
+                    }
+                    main.postDelayed({ rec.destroy() }, 15000)
+                }
+
+                override fun onError(error: Int) {
+                    rec.destroy()
+                }
+            })
+        } catch (_: Throwable) {
+        }
     }
 }
 

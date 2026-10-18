@@ -3,7 +3,10 @@ package com.romme.traductor
 import android.app.Application
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
+import android.os.Handler
+import android.os.Looper
 import android.net.Uri
 import android.speech.SpeechRecognizer
 import androidx.compose.runtime.getValue
@@ -27,7 +30,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val speaker = Speaker(ctx)
 
     // Navegación
-    var screen by mutableStateOf(if (prefs.setupDone) Screen.HOME else Screen.SETUP)
+    var screen by mutableStateOf(Screen.HOME)
         private set
 
     // Opciones
@@ -76,9 +79,51 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var readBusy by mutableStateOf(false)
         private set
 
+    private val cm get() = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val netCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            mainHandler.postDelayed({ if (!offlineReady || !speechChecked) autoPrepare() }, 1500)
+        }
+    }
+    private var speechChecked = false
+
     init {
         readFrom = prefs.myLang.other
-        refreshOffline()
+        prefs.myLang = prefs.myLang // guarda el idioma detectado
+        autoPrepare()
+        // Si la app se abrió sin internet, se prepara sola apenas haya conexión
+        try {
+            cm.registerDefaultNetworkCallback(netCallback)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** Clave de IA: la que viene incluida en la app, o una propia si se cargó en Ajustes. */
+    private fun key(): String = apiKey.ifBlank { BuildConfig.GEMINI_KEY }
+    val hasBuiltInKey: Boolean get() = BuildConfig.GEMINI_KEY.isNotBlank()
+
+    /** Deja todo listo para usar sin internet, sin que el usuario haga nada. */
+    fun autoPrepare() {
+        viewModelScope.launch {
+            offlineReady = runCatching { engine.offlineReady() }.getOrDefault(false)
+            if (!hasInternet()) return@launch
+            if (!offlineReady && !downloading) {
+                downloading = true
+                try {
+                    engine.downloadOffline(wifiOnly = false)
+                    offlineReady = engine.offlineReady()
+                } catch (_: Exception) {
+                } finally {
+                    downloading = false
+                }
+            }
+            if (!speechChecked) {
+                speechChecked = true
+                OfflineSpeech.ensure(ctx, Lang.ES)
+                OfflineSpeech.ensure(ctx, Lang.EN)
+            }
+        }
     }
 
     // ───────── Navegación y opciones ─────────
@@ -95,7 +140,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateOnline(v: Boolean) {
         online = v; prefs.online = v
-        if (v && apiKey.isBlank()) {
+        if (v && key().isBlank()) {
             notice = "Para el modo con internet falta la clave de IA (Ajustes)."
         }
     }
@@ -145,7 +190,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
-    private fun useOnlineNow(): Boolean = online && apiKey.isNotBlank() && hasInternet()
+    private fun useOnlineNow(): Boolean = online && key().isNotBlank() && hasInternet()
 
     // ───────── Escuchar ─────────
     fun toggleListening(lang: Lang) {
@@ -171,7 +216,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         listeningLang = lang
         listener.start(
             lang = lang,
-            preferOffline = !useOnlineNow(),
+            preferOffline = !hasInternet(),
             onPartial = { partial = it },
             onLevel = { micLevel = it },
             onResult = { text ->
@@ -199,16 +244,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun errorText(code: Int, lang: Lang): String? = when (code) {
         SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
             lang.t("No te escuché bien. Tocá el micrófono y probá de nuevo.", "I didn't catch that. Tap the mic and try again.")
-        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER ->
+        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER, 12, 13 -> {
+            speechChecked = false
             lang.t(
-                "Sin conexión: descargá la voz sin internet de \"${lang.spanishName}\" en Ajustes.",
-                "No connection: download offline speech for \"${lang.englishName}\" in Settings."
+                "La voz sin internet todavía no está lista. Conectate un ratito a wifi o datos: la app la prepara sola.",
+                "Offline voice isn't ready yet. Connect to wifi or data for a moment: the app sets it up by itself."
             )
-        12, 13 -> // idioma no disponible sin conexión
-            lang.t(
-                "Falta el paquete de voz sin internet de ${lang.spanishName}. Ver Ajustes.",
-                "Offline speech pack for ${lang.englishName} is missing. See Settings."
-            )
+        }
         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
             lang.t("Falta el permiso del micrófono.", "Microphone permission is needed.")
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
@@ -222,11 +264,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun translate(text: String, from: Lang): Result? {
         if (useOnlineNow()) {
             try {
-                return Result(engine.translateOnline(text, from, apiKey, model), true)
+                return Result(engine.translateOnline(text, from, key(), model), true)
             } catch (e: Exception) {
                 notice = from.t("La IA no respondió; usé la traducción sin internet.", "AI didn't answer; used offline translation.")
             }
-        } else if (online && apiKey.isNotBlank()) {
+        } else if (online && key().isNotBlank()) {
             notice = from.t("Sin internet: traduciendo sin conexión.", "No internet: translating offline.")
         }
         return try {
@@ -297,6 +339,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        try {
+            cm.unregisterNetworkCallback(netCallback)
+        } catch (_: Exception) {
+        }
         listener.destroy()
         speaker.shutdown()
         engine.close()
